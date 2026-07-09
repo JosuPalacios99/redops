@@ -1,0 +1,14 @@
+# Entorno / dependencias
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Datos locales
+agenda.db
+
+# Configuración de herramientas / editor
+.claude/
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RedOps</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+<script>document.documentElement.dataset.theme = localStorage.getItem('agenda_theme') || 'dark';</script>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<!-- Iconos reutilizables -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-crosshair" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8"/><line x1="12" y1="1.5" x2="12" y2="6"/>
+      <line x1="12" y1="18" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="6" y2="12"/>
+      <line x1="18" y1="12" x2="22.5" y2="12"/>
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4.5"/><line x1="12" y1="1.5" x2="12" y2="4"/>
+      <line x1="12" y1="20" x2="12" y2="22.5"/><line x1="4.6" y1="4.6" x2="6.3" y2="6.3"/>
+      <line x1="17.7" y1="17.7" x2="19.4" y2="19.4"/><line x1="1.5" y1="12" x2="4" y2="12"/>
+      <line x1="20" y1="12" x2="22.5" y2="12"/><line x1="4.6" y1="19.4" x2="6.3" y2="17.7"/>
+      <line x1="17.7" y1="6.3" x2="19.4" y2="4.6"/>
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24">
+      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+    </symbol>
+    <symbol id="i-checklist" viewBox="0 0 24 24">
+      <polyline points="3 6 4.5 7.5 7 4.5"/><polyline points="3 13 4.5 14.5 7 11.5"/>
+      <line x1="11" y1="6" x2="21" y2="6"/><line x1="11" y1="13" x2="21" y2="13"/>
+      <line x1="11" y1="20" x2="21" y2="20"/><polyline points="3 20 4.5 21.5 7 18.5"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ============================== AUTH ============================== -->
+<section id="screen-auth" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg class="icon brand-icon"><use href="#i-crosshair"/></svg>
+      <span class="brand">RED<b>OPS</b></span>
+    </div>
+    <h1 id="auth-title" data-i18n="auth.login_title">Iniciar sesión</h1>
+    <p id="auth-subtitle" class="muted hidden" data-i18n="auth.setup_subtitle">Primer arranque: crea tu usuario</p>
+    <form id="auth-form" autocomplete="off">
+      <label><span data-i18n="auth.username">Usuario</span>
+        <input id="auth-username" type="text" required autocomplete="username">
+      </label>
+      <label><span data-i18n="auth.password">Contraseña</span>
+        <input id="auth-password" type="password" required autocomplete="current-password">
+      </label>
+      <p id="auth-error" class="form-error hidden"></p>
+      <button type="submit" class="btn btn-primary btn-block" id="auth-submit" data-i18n="auth.enter">Entrar</button>
+    </form>
+    <div class="auth-lang">
+      <button class="lang-btn" data-lang="es">ES</button><button class="lang-btn" data-lang="en">EN</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== APP ============================== -->
+<section id="screen-app" class="hidden">
+  <header class="topbar">
+    <div class="brand-wrap">
+      <svg class="icon brand-icon"><use href="#i-crosshair"/></svg>
+      <span class="brand">RED<b>OPS</b></span>
+    </div>
+    <nav class="month-nav">
+      <button id="nav-prev" class="btn btn-icon" aria-label="&larr;"><svg class="icon"><use href="#i-chevron-left"/></svg></button>
+      <button id="nav-today" class="btn btn-ghost" data-i18n="nav.today">Hoy</button>
+      <button id="nav-next" class="btn btn-icon" aria-label="&rarr;"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
+      <h2 id="month-label"></h2>
+    </nav>
+    <div class="topbar-right">
+      <div class="seg view-toggle">
+        <button id="view-month" class="active" data-i18n="nav.month">Mes</button>
+        <button id="view-agenda" data-i18n="nav.agenda">Agenda</button>
+      </div>
+      <div class="seg lang-toggle">
+        <button class="lang-btn" data-lang="es">ES</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-todos" class="btn btn-icon" data-i18n-title="todos.title" title="Lista de tareas"><svg class="icon"><use href="#i-checklist"/></svg></button>
+        <button id="btn-notes" class="btn btn-icon" data-i18n-title="notes.title" title="Notas rápidas"><svg class="icon"><use href="#i-note"/></svg></button>
+        <button id="btn-theme" class="btn btn-icon" data-i18n-title="nav.theme" title="Tema">
+          <svg class="icon icon-sun"><use href="#i-sun"/></svg>
+          <svg class="icon icon-moon"><use href="#i-moon"/></svg>
+        </button>
+        <button id="btn-settings" class="btn btn-icon" data-i18n-title="settings.title" title="Ajustes"><svg class="icon"><use href="#i-settings"/></svg></button>
+        <button id="btn-logout" class="btn btn-icon" data-i18n-title="nav.logout" title="Salir"><svg class="icon"><use href="#i-logout"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <div id="calendar-view"></div>
+      <div id="agenda-view" class="hidden"></div>
+    </main>
+
+    <aside class="sidebar">
+      <div class="side-section">
+        <h3 data-i18n="side.today">Hoy</h3>
+        <div id="today-list" class="side-list"></div>
+      </div>
+      <div class="side-section">
+        <h3 data-i18n="side.upcoming">Próximo</h3>
+        <div id="upcoming-list" class="side-list"></div>
+      </div>
+      <div class="side-section">
+        <h3 data-i18n="todos.title">Lista de tareas</h3>
+        <form id="side-todo-form" class="todo-quickadd">
+          <input id="side-todo-input" type="text" maxlength="200" data-i18n-placeholder="todos.placeholder" placeholder="Añadir tarea…">
+          <button class="btn btn-icon" type="submit" aria-label="+"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </form>
+        <div id="side-todos" class="todo-list"></div>
+      </div>
+      <div class="side-section">
+        <h3 data-i18n="notes.title">Notas rápidas</h3>
+        <div id="side-notes" class="side-list"></div>
+      </div>
+      <div class="side-section legend-section">
+        <h3 data-i18n="side.legend">Leyenda</h3>
+        <div class="legend" id="legend"></div>
+      </div>
+    </aside>
+  </div>
+
+  <button id="fab" class="fab" data-i18n-title="fab.new" title="Nuevo"><svg class="icon"><use href="#i-plus"/></svg></button>
+</section>
+
+<!-- ============================ MODALES ============================ -->
+<div id="modal-backdrop" class="modal-backdrop hidden">
+
+  <!-- Crear/editar elemento -->
+  <div id="modal-item" class="modal hidden">
+    <div class="modal-head">
+      <div class="tabs" id="item-tabs">
+        <button class="tab active" data-tab="audit" data-i18n="item.audit">Auditoría</button>
+        <button class="tab" data-tab="meeting" data-i18n="item.meeting">Reunión</button>
+        <button class="tab" data-tab="task" data-i18n="item.task">Tarea</button>
+        <button class="tab" data-tab="vacation" data-i18n="item.vacation">Vacaciones</button>
+      </div>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+
+    <form id="item-form">
+      <input type="hidden" id="item-id">
+      <label><span data-i18n="form.title">Título / cliente</span>
+        <input id="item-title" type="text" required maxlength="120" data-i18n-placeholder="form.title_ph" placeholder="p. ej. ACME Corp — Revisión Q3">
+      </label>
+
+      <!-- campos de auditoría -->
+      <div class="only-audit">
+        <div class="grid-2">
+          <label><span data-i18n="form.type">Tipo</span>
+            <select id="item-type"></select>
+          </label>
+          <label><span data-i18n="form.status">Estado</span>
+            <select id="item-status">
+              <option value="planned" data-i18n="status.planned">Planificada</option>
+              <option value="in_progress" data-i18n="status.in_progress">En curso</option>
+              <option value="reporting" data-i18n="status.reporting">Informe</option>
+              <option value="done" data-i18n="status.done">Terminada</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid-2">
+          <label><span data-i18n="form.audit_start">Inicio auditoría</span>
+            <input id="item-audit-start" type="date"></label>
+          <label><span data-i18n="form.audit_end">Fin auditoría</span>
+            <input id="item-audit-end" type="date"></label>
+        </div>
+        <div class="grid-2">
+          <label><span data-i18n="form.report_start">Inicio informe</span>
+            <input id="item-report-start" type="date"></label>
+          <label><span data-i18n="form.report_end">Fin informe</span>
+            <input id="item-report-end" type="date"></label>
+        </div>
+        <p class="form-hint" data-i18n="form.report_hint">El periodo de informe es opcional; se pinta rayado en el calendario.</p>
+        <label><span data-i18n="form.teammates">Compañeros</span>
+          <div id="item-teammates" class="chip-select"></div>
+        </label>
+      </div>
+
+      <!-- campos de reunión/tarea -->
+      <div class="only-event">
+        <div class="grid-2">
+          <label><span data-i18n="form.datetime">Fecha y hora</span>
+            <input id="item-datetime" type="datetime-local"></label>
+          <label class="only-meeting"><span data-i18n="form.duration">Duración (min)</span>
+            <input id="item-duration" type="number" min="0" step="5" list="duration-presets" placeholder="60">
+            <datalist id="duration-presets">
+              <option value="30"></option><option value="45"></option><option value="60"></option>
+              <option value="90"></option><option value="120"></option>
+            </datalist>
+          </label>
+        </div>
+        <label class="only-meeting"><span data-i18n="form.linked_audit">Auditoría asociada</span>
+          <select id="item-audit-link"></select>
+        </label>
+        <label class="check-row only-task hidden">
+          <input id="item-done" type="checkbox">
+          <span data-i18n="form.done">Completada</span>
+        </label>
+      </div>
+
+      <!-- campos de vacaciones -->
+      <div class="only-vacation">
+        <div class="grid-2">
+          <label><span data-i18n="form.start">Inicio</span>
+            <input id="item-vac-start" type="date"></label>
+          <label><span data-i18n="form.end">Fin</span>
+            <input id="item-vac-end" type="date"></label>
+        </div>
+      </div>
+
+      <label><span data-i18n="form.location">Ubicación</span>
+        <div class="location-row">
+          <input id="item-location" type="text" maxlength="200" data-i18n-placeholder="form.location_ph" placeholder="Dirección, ciudad o sede">
+          <button type="button" id="item-location-maps" class="btn btn-icon"
+                  data-i18n-title="form.open_maps" title="Abrir en Maps"><svg class="icon"><use href="#i-pin"/></svg></button>
+        </div>
+      </label>
+      <label><span data-i18n="form.notes">Notas</span>
+        <textarea id="item-notes" rows="2"></textarea>
+      </label>
+
+      <fieldset class="reminders-box">
+        <legend data-i18n="form.reminders">Avisos</legend>
+        <div id="reminder-chips" class="chips"></div>
+        <div class="reminder-add">
+          <select id="reminder-preset">
+            <option value="15" data-i18n="rem.15m">15 min antes</option>
+            <option value="60" data-i18n="rem.1h">1 hora antes</option>
+            <option value="1440" data-i18n="rem.1d">1 día antes</option>
+            <option value="10080" data-i18n="rem.1w">1 semana antes</option>
+            <option value="custom" data-i18n="rem.custom">Personalizado…</option>
+          </select>
+          <input id="reminder-custom" type="number" min="1" class="hidden" placeholder="min">
+          <button type="button" id="reminder-add-btn" class="btn" data-i18n="form.add">Añadir</button>
+        </div>
+      </fieldset>
+
+      <div class="modal-actions">
+        <button type="button" id="item-delete" class="btn btn-danger hidden">
+          <svg class="icon"><use href="#i-trash"/></svg><span data-i18n="form.delete">Eliminar</span>
+        </button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost modal-close" data-i18n="form.cancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary" data-i18n="form.save">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Ajustes -->
+  <div id="modal-settings" class="modal hidden">
+    <div class="modal-head">
+      <h2 data-i18n="settings.title">Ajustes</h2>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="tabs" id="settings-tabs">
+      <button class="tab active" data-tab="general" data-i18n="settings.general">General</button>
+      <button class="tab" data-tab="teammates" data-i18n="settings.teammates">Compañeros</button>
+      <button class="tab" data-tab="types" data-i18n="settings.types">Tipos</button>
+      <button class="tab" data-tab="password" data-i18n="settings.password">Contraseña</button>
+    </div>
+
+    <div class="settings-pane" data-pane="general">
+      <label><span data-i18n="settings.lang">Idioma</span>
+        <select id="set-lang"><option value="es">Español</option><option value="en">English</option></select>
+      </label>
+      <fieldset class="reminders-box">
+        <legend data-i18n="settings.default_reminders">Avisos por defecto</legend>
+        <p class="form-hint" data-i18n="settings.default_reminders_hint" style="margin:0 0 10px">Se aplican al crear nuevos elementos; luego puedes cambiarlos en cada uno.</p>
+        <div id="set-reminder-chips" class="chips"></div>
+        <div class="reminder-add">
+          <select id="set-reminder-preset">
+            <option value="15" data-i18n="rem.15m">15 min antes</option>
+            <option value="60" data-i18n="rem.1h">1 hora antes</option>
+            <option value="1440" data-i18n="rem.1d">1 día antes</option>
+            <option value="10080" data-i18n="rem.1w">1 semana antes</option>
+            <option value="custom" data-i18n="rem.custom">Personalizado…</option>
+          </select>
+          <input id="set-reminder-custom" type="number" min="1" class="hidden" placeholder="min">
+          <button type="button" id="set-reminder-add-btn" class="btn" data-i18n="form.add">Añadir</button>
+        </div>
+      </fieldset>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="set-save-general" class="btn btn-primary" data-i18n="form.save">Guardar</button>
+      </div>
+    </div>
+
+    <div class="settings-pane hidden" data-pane="teammates">
+      <div id="teammates-list" class="manage-list"></div>
+      <form id="teammate-form" class="inline-form">
+        <input id="teammate-name" type="text" maxlength="60" data-i18n-placeholder="settings.teammate_name" placeholder="Nombre" required>
+        <input id="teammate-color" type="color" value="#8b949e">
+        <button class="btn btn-primary" data-i18n="form.add">Añadir</button>
+      </form>
+    </div>
+
+    <div class="settings-pane hidden" data-pane="types">
+      <div id="types-list" class="manage-list"></div>
+      <form id="type-form" class="inline-form">
+        <input id="type-name-es" type="text" maxlength="60" placeholder="Nombre (ES)" required>
+        <input id="type-name-en" type="text" maxlength="60" placeholder="Name (EN)" required>
+        <input id="type-color" type="color" value="#bc8cff">
+        <button class="btn btn-primary" data-i18n="form.add">Añadir</button>
+      </form>
+    </div>
+
+    <div class="settings-pane hidden" data-pane="password">
+      <form id="password-form">
+        <label><span data-i18n="settings.current_password">Contraseña actual</span>
+          <input id="pw-current" type="password" required autocomplete="current-password"></label>
+        <label><span data-i18n="settings.new_password">Nueva contraseña (mín. 8)</span>
+          <input id="pw-new" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label><span data-i18n="settings.new_password2">Repite la nueva contraseña</span>
+          <input id="pw-new2" type="password" required minlength="8" autocomplete="new-password"></label>
+        <p id="pw-msg" class="form-error hidden"></p>
+        <div class="modal-actions">
+          <span class="spacer"></span>
+          <button class="btn btn-primary" data-i18n="settings.change_password">Cambiar contraseña</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notas rápidas -->
+  <div id="modal-notes" class="modal hidden">
+    <div class="modal-head">
+      <h2 data-i18n="notes.title">Notas rápidas</h2>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <form id="note-form">
+      <input type="hidden" id="note-id">
+      <textarea id="note-input" rows="3" data-i18n-placeholder="notes.placeholder"
+                placeholder="Escribe una nota…" required></textarea>
+      <div class="modal-actions">
+        <button type="button" id="note-cancel" class="btn btn-ghost hidden" data-i18n="form.cancel">Cancelar</button>
+        <span class="spacer"></span>
+        <button type="submit" class="btn btn-primary" id="note-submit" data-i18n="form.add">Añadir</button>
+      </div>
+    </form>
+    <div id="notes-list" class="notes-list"></div>
+  </div>
+
+  <!-- Lista de tareas -->
+  <div id="modal-todos" class="modal hidden">
+    <div class="modal-head">
+      <h2 data-i18n="todos.title">Lista de tareas</h2>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <form id="todo-form" class="todo-quickadd">
+      <input id="todo-input" type="text" maxlength="200" data-i18n-placeholder="todos.placeholder"
+             placeholder="Añadir tarea…" required>
+      <button type="submit" class="btn btn-primary" data-i18n="form.add">Añadir</button>
+    </form>
+    <div id="todos-list" class="todo-list modal-todo-list"></div>
+    <div class="modal-actions">
+      <button type="button" id="todos-clear" class="btn btn-ghost" data-i18n="todos.clear_done">Quitar completadas</button>
+      <span class="spacer"></span>
+    </div>
+  </div>
+
+  <!-- Detalle de día -->
+  <div id="modal-day" class="modal hidden">
+    <div class="modal-head">
+      <h2 id="day-label"></h2>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div id="day-items" class="side-list"></div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button id="day-add" class="btn btn-primary">
+        <svg class="icon"><use href="#i-plus"/></svg><span data-i18n="fab.new">Nuevo</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/i18n.js"></script>
+<script src="/static/js/calendar.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
