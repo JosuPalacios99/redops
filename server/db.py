@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS events (
     duration_min INTEGER,
     location TEXT,
     notes TEXT,
-    done INTEGER NOT NULL DEFAULT 0
+    done INTEGER NOT NULL DEFAULT 0,
+    series_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS vacations (
@@ -82,10 +83,22 @@ CREATE TABLE IF NOT EXISTS notes (
     updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS task_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    builtin INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS todos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     done INTEGER NOT NULL DEFAULT 0,
+    group_id INTEGER REFERENCES task_groups(id) ON DELETE SET NULL,
+    recurrence TEXT,
+    rec_interval INTEGER NOT NULL DEFAULT 1,
+    due TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -187,17 +200,54 @@ def _migrate_time_entries_event(conn: sqlite3.Connection) -> None:
         """)
 
 
+def hoy_group_id(conn: sqlite3.Connection) -> int:
+    """Id del grupo integrado 'Hoy' (se crea si falta)."""
+    row = conn.execute(
+        "SELECT id FROM task_groups WHERE slug = 'today'").fetchone()
+    if row:
+        return row["id"]
+    cur = conn.execute(
+        "INSERT INTO task_groups (name, slug, position, builtin) VALUES ('Hoy','today',0,1)")
+    return cur.lastrowid
+
+
+def _migrate_todos_group(conn: sqlite3.Connection) -> None:
+    """BDs con todos previo a los grupos: añadir group_id y asignar todo a 'Hoy'."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='todos'").fetchone()
+    if row and "group_id" not in row["sql"]:
+        conn.execute(
+            "ALTER TABLE todos ADD COLUMN group_id INTEGER"
+            " REFERENCES task_groups(id) ON DELETE SET NULL")
+    hoy = hoy_group_id(conn)
+    conn.execute("UPDATE todos SET group_id = ? WHERE group_id IS NULL", (hoy,))
+
+
+def _add_column(conn: sqlite3.Connection, table: str, colname: str, coldef: str) -> None:
+    """Añade una columna si aún no existe (migración simple, aditiva)."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    if row and colname not in row["sql"]:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {coldef}")
+
+
 def init_db() -> None:
     conn = connect()
     try:
         _migrate_time_entries_event(conn)
         conn.executescript(SCHEMA)
         _migrate_reminders_check(conn)
+        _add_column(conn, "events", "series_id", "series_id TEXT")
+        _add_column(conn, "todos", "recurrence", "recurrence TEXT")
+        _add_column(conn, "todos", "rec_interval", "rec_interval INTEGER NOT NULL DEFAULT 1")
+        _add_column(conn, "todos", "due", "due TEXT")
         if conn.execute("SELECT COUNT(*) FROM audit_types").fetchone()[0] == 0:
             conn.executemany(
                 "INSERT INTO audit_types (name_es, name_en, color, builtin) VALUES (?, ?, ?, 1)",
                 BUILTIN_TYPES,
             )
+        hoy_group_id(conn)
+        _migrate_todos_group(conn)
         conn.commit()
     finally:
         conn.close()

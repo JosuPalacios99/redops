@@ -3,9 +3,9 @@ import asyncio
 import os
 import shutil
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
-from . import db
+from . import db, recur
 
 CHECK_INTERVAL_S = 30
 MISSED_AFTER = timedelta(hours=24)
@@ -194,10 +194,37 @@ async def _check_once() -> None:
         conn.close()
 
 
+def _roll_recurring_todos() -> None:
+    """Al pasar su periodo, las tareas recurrentes vuelven a pendiente con nueva fecha."""
+    conn = db.connect()
+    try:
+        today = date.today()
+        rows = conn.execute(
+            "SELECT id, recurrence, rec_interval, due FROM todos"
+            " WHERE recurrence IS NOT NULL AND due IS NOT NULL").fetchall()
+        for t in rows:
+            try:
+                d = date.fromisoformat(t["due"])
+            except (ValueError, TypeError):
+                continue
+            changed = False
+            guard = 0
+            while d < today and guard < 1000:
+                d = recur.advance(d, t["recurrence"], t["rec_interval"])
+                changed, guard = True, guard + 1
+            if changed:
+                conn.execute("UPDATE todos SET due = ?, done = 0 WHERE id = ?",
+                             (d.isoformat(), t["id"]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 async def run_forever() -> None:
     _mark_stale_on_startup()
     while True:
         try:
+            _roll_recurring_todos()
             await _check_once()
         except Exception as exc:  # noqa: BLE001 — el bucle nunca debe morir
             print(f"[notifier] error: {exc}")

@@ -6,9 +6,10 @@ const App = {
     view: 'month',
     data: { audits: [], events: [], vacations: [], types: {}, teammates: {} },
     timeData: null,            // rejilla de horas de la semana visible
-    extraRows: [],             // filas añadidas a mano en la rejilla (task keys)
+    extraRows: {},             // filas añadidas a mano por semana: { weekStart: [task keys] }
     notes: [],
     todos: [],
+    taskGroups: [],            // grupos de la lista de tareas (Hoy + propios)
     setupMode: false,
     editing: null,             // {kind, id} en edición, null en creación
     itemTab: 'audit',
@@ -70,43 +71,230 @@ const App = {
     const toDate = new Date();
     toDate.setDate(toDate.getDate() + 60);
     const to = Cal.fmt(new Date(Math.max(end, toDate)));
-    [this.state.data, this.state.notes, this.state.todos] = await Promise.all([
-      API.get(`/api/calendar?date_from=${from}&date_to=${to}`),
-      API.get('/api/notes'),
-      API.get('/api/todos'),
-    ]);
+    [this.state.data, this.state.notes, this.state.todos, this.state.taskGroups] =
+      await Promise.all([
+        API.get(`/api/calendar?date_from=${from}&date_to=${to}`),
+        API.get('/api/notes'),
+        API.get('/api/todos'),
+        API.get('/api/task-groups'),
+      ]);
     this.render();
   },
 
   render() {
     const { cursor, data, view } = this.state;
     this.$('month-label').textContent =
-      view === 'hours' ? this.weekLabel() : I18N.monthLabel(cursor);
+      view === 'hours' ? this.weekLabel()
+        : view === 'tasks' ? I18N.t('nav.tasks')
+          : I18N.monthLabel(cursor);
 
     const handlers = {
       onDayClick: (d) => this.openDayModal(d),
       onAuditClick: (a) => this.openItemModal('audit', a),
       onEventClick: (ev) => this.openItemModal(ev.kind, ev),
       onVacationClick: (v) => this.openItemModal('vacation', v),
+      onTaskToggle: (t) => this.toggleTodo(t),
     };
 
     this.$('calendar-view').classList.toggle('hidden', view !== 'month');
     this.$('agenda-view').classList.toggle('hidden', view !== 'agenda');
+    this.$('tasks-view').classList.toggle('hidden', view !== 'tasks');
     this.$('hours-view').classList.toggle('hidden', view !== 'hours');
     this.$('view-month').classList.toggle('active', view === 'month');
     this.$('view-agenda').classList.toggle('active', view === 'agenda');
+    this.$('view-tasks').classList.toggle('active', view === 'tasks');
     this.$('view-hours').classList.toggle('active', view === 'hours');
 
     if (view === 'month') {
+      const augmented = { ...data, todayTasks: this.hoyTasks(false) };
       Cal.renderMonth(this.$('calendar-view'),
-        cursor.getFullYear(), cursor.getMonth(), data, handlers);
+        cursor.getFullYear(), cursor.getMonth(), augmented, handlers);
     } else if (view === 'agenda') {
       Cal.renderAgenda(this.$('agenda-view'), data, handlers);
+    } else if (view === 'tasks') {
+      this.renderTasks();
     } else {
       this.renderHours();
     }
     this.renderSidebar();
     this.renderLegend();
+  },
+
+  // ------------------------------------------------------------ tareas (grupos)
+
+  hoyGroupId() {
+    const g = this.state.taskGroups.find((x) => x.slug === 'today');
+    return g ? g.id : null;
+  },
+
+  hoyTasks(includeDone) {
+    const hoy = this.hoyGroupId();
+    return this.state.todos.filter((t) =>
+      t.group_id === hoy && (includeDone || !t.done));
+  },
+
+  groupLabel(g) {
+    return g.slug ? I18N.t('taskgroup.' + g.slug) : g.name;
+  },
+
+  async toggleTodo(t) {
+    await API.put(`/api/todos/${t.id}`, { content: t.content, done: !t.done });
+    await this.reloadTodos();
+    if (this.state.view === 'month') this.render();
+  },
+
+  async moveTodo(t, groupId) {
+    await API.put(`/api/todos/${t.id}`,
+      { content: t.content, done: t.done, group_id: groupId });
+    await this.reloadTodos();
+  },
+
+  renderTasks() {
+    const box = this.$('tasks-view');
+    box.innerHTML = '';
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'tasks-toolbar';
+    const form = document.createElement('form');
+    form.className = 'inline-form';
+    form.innerHTML =
+      `<input id="taskgroup-name" type="text" maxlength="40" placeholder="${I18N.t('tasks.new_group')}" required>` +
+      `<button class="btn btn-primary" type="submit">${I18N.t('form.add')}</button>`;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = form.querySelector('#taskgroup-name').value.trim();
+      if (!name) return;
+      await API.post('/api/task-groups', { name });
+      this.state.taskGroups = await API.get('/api/task-groups');
+      this.renderTasks();
+    });
+    toolbar.appendChild(form);
+    box.appendChild(toolbar);
+
+    const grid = document.createElement('div');
+    grid.className = 'tasks-grid';
+    this.state.taskGroups.forEach((g) => grid.appendChild(this.taskGroupCard(g)));
+    box.appendChild(grid);
+  },
+
+  taskGroupCard(group) {
+    const card = document.createElement('div');
+    card.className = 'task-group';
+    const tasks = this.state.todos.filter((t) => t.group_id === group.id);
+    const pending = tasks.filter((t) => !t.done).length;
+
+    const head = document.createElement('div');
+    head.className = 'task-group-head';
+    head.innerHTML = `<h3></h3><span class="tg-count">${pending}</span>`;
+    head.querySelector('h3').textContent = this.groupLabel(group);
+    if (!group.builtin) {
+      const del = document.createElement('button');
+      del.className = 'btn btn-icon tg-del';
+      del.innerHTML = `<svg class="icon"><use href="#i-trash"/></svg>`;
+      del.title = I18N.t('form.delete');
+      del.addEventListener('click', async () => {
+        if (!confirm(I18N.t('tasks.group_delete_confirm'))) return;
+        await API.del(`/api/task-groups/${group.id}`);
+        this.state.taskGroups = await API.get('/api/task-groups');
+        await this.reloadTodos();
+        this.renderTasks();
+      });
+      head.appendChild(del);
+    }
+    card.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'todo-list';
+    if (!tasks.length) {
+      list.innerHTML = `<p class="empty-hint">${I18N.t('todos.empty')}</p>`;
+    } else {
+      tasks.forEach((t) => list.appendChild(this.taskRow(t)));
+    }
+    card.appendChild(list);
+
+    const add = document.createElement('form');
+    add.className = 'todo-quickadd';
+    add.innerHTML =
+      `<input type="text" maxlength="200" placeholder="${I18N.t('todos.placeholder')}">` +
+      `<button class="btn btn-icon" type="submit" aria-label="+"><svg class="icon"><use href="#i-plus"/></svg></button>`;
+    add.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = add.querySelector('input');
+      const content = input.value.trim();
+      if (!content) return;
+      await API.post('/api/todos', { content, group_id: group.id });
+      input.value = '';
+      await this.reloadTodos();
+    });
+    card.appendChild(add);
+    return card;
+  },
+
+  taskRow(t) {
+    const el = this.todoItem(t);
+    // Insignia de recurrencia
+    if (t.recurrence) {
+      const badge = document.createElement('span');
+      badge.className = 'rec-badge';
+      badge.innerHTML = `<svg class="icon"><use href="#i-repeat"/></svg><span></span>`;
+      badge.querySelector('span').textContent = this.recurShort(t);
+      el.querySelector('.todo-text').appendChild(badge);
+    }
+    // Botón para configurar la recurrencia
+    const rec = document.createElement('button');
+    rec.className = 'btn btn-icon task-rec' + (t.recurrence ? ' on' : '');
+    rec.innerHTML = `<svg class="icon"><use href="#i-repeat"/></svg>`;
+    rec.title = I18N.t('recur.task_title');
+    rec.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openTodoRecurrence(t);
+    });
+    // Selector para mover la tarea a otro grupo
+    const sel = document.createElement('select');
+    sel.className = 'task-move';
+    this.state.taskGroups.forEach((g) => {
+      const o = document.createElement('option');
+      o.value = g.id;
+      o.textContent = this.groupLabel(g);
+      if (g.id === t.group_id) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => this.moveTodo(t, Number(sel.value)));
+    sel.addEventListener('click', (e) => e.stopPropagation());
+    const delBtn = el.querySelector('.del');
+    el.insertBefore(sel, delBtn);
+    el.insertBefore(rec, delBtn);
+    return el;
+  },
+
+  recurShort(t) {
+    const n = t.rec_interval > 1 ? `×${t.rec_interval}` : '';
+    return `${I18N.t('recur.' + t.recurrence)}${n}`;
+  },
+
+  openTodoRecurrence(t) {
+    this.$('tr-id').value = t.id;
+    this.$('tr-freq').value = t.recurrence || '';
+    this.$('tr-interval').value = t.rec_interval || 1;
+    this.$('tr-due').value = t.due || Cal.fmt(new Date());
+    const on = Boolean(t.recurrence);
+    document.querySelectorAll('#todo-recur-form .tr-when').forEach((el) =>
+      el.classList.toggle('hidden', !on));
+    this.openModal('modal-todo-recur');
+  },
+
+  async saveTodoRecurrence() {
+    const id = this.$('tr-id').value;
+    const freq = this.$('tr-freq').value;
+    const body = freq
+      ? { recurrence: freq,
+          rec_interval: Number(this.$('tr-interval').value) || 1,
+          due: this.$('tr-due').value || Cal.fmt(new Date()) }
+      : { recurrence: null };
+    await API.put(`/api/todos/${id}/recurrence`, body);
+    this.closeModals();
+    await this.reloadTodos();
+    this.toast(I18N.t('toast.saved'));
   },
 
   // ------------------------------------------------------------ horas
@@ -125,6 +313,7 @@ const App = {
   },
 
   navigate(dir) {
+    if (this.state.view === 'tasks') return;  // la vista de tareas no navega por fecha
     if (this.state.view === 'hours') {
       this.state.weekCursor.setDate(this.state.weekCursor.getDate() + dir * 7);
       this.loadHours();
@@ -176,7 +365,7 @@ const App = {
       }
     };
 
-    td.categories.forEach((c) => push(`cat:${c.id}`, c.name, c.color));
+    // Auditorías que solapan la semana (fase ejecución o informe)
     td.audits.forEach((a) => {
       const exec = a.audit_start && a.audit_start <= last && a.audit_end >= first;
       const rep = a.report_start && a.report_end &&
@@ -186,14 +375,14 @@ const App = {
     // Reuniones y tareas que caen en la semana
     (td.events || []).forEach((e) =>
       push(`event:${e.id}`, this.eventRowName(e), this.eventColor(e.kind)));
-    // Filas con horas imputadas aunque la tarea no salga arriba
+    // Filas con horas imputadas esta semana (incluye categorías con horas)
     td.entries.forEach((e) => {
       const key = e.audit_id ? `audit:${e.audit_id}`
         : e.event_id ? `event:${e.event_id}` : `cat:${e.category_id}`;
       pushKey(key);
     });
-    // Filas añadidas a mano en la sesión
-    this.state.extraRows.forEach((key) => pushKey(key));
+    // Filas añadidas a mano en esta semana (las categorías solo salen si se seleccionan)
+    (this.state.extraRows[td.start] || []).forEach((key) => pushKey(key));
     return { rows, catById, auditById, eventById };
   },
 
@@ -269,14 +458,16 @@ const App = {
         addSel.value = '';
         if (!name) return;
         try {
-          await API.post('/api/time/categories', { name, color: '#8b949e' });
-          await this.loadHours();  // recarga: la categoría nueva sale como fila
+          const cat = await API.post('/api/time/categories', { name, color: '#8b949e' });
+          // Añadirla como fila de esta semana (las categorías ya no salen solas)
+          (this.state.extraRows[td.start] ||= []).push(`cat:${cat.id}`);
+          await this.loadHours();
         } catch (err) {
           this.toast(`${I18N.t('toast.error')}: ${err.message}`, true);
         }
         return;
       }
-      this.state.extraRows.push(v);
+      (this.state.extraRows[td.start] ||= []).push(v);
       this.renderHours();
     });
     toolbar.appendChild(addSel);
@@ -462,15 +653,23 @@ const App = {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
   },
 
-  sideItem(entry, data) {
+  shortDay(dateStr) {
+    if (!dateStr) return '';
+    const loc = I18N.lang === 'es' ? 'es-ES' : 'en-GB';
+    return Cal.parse(dateStr).toLocaleDateString(loc,
+      { weekday: 'short', day: 'numeric', month: 'short' });
+  },
+
+  sideItem(entry, data, showDate = false) {
     const el = document.createElement('div');
     el.className = 'side-item';
-    let title = '', sub = '', color = '#8b949e', onclick = null, location = null;
+    let title = '', sub = '', color = '#8b949e', onclick = null, location = null, dayStr = null;
 
     if (entry.type === 'event') {
       const ev = entry.ev;
       title = ev.title;
       location = ev.location;
+      dayStr = ev.datetime.slice(0, 10);
       const time = ev.datetime.includes('T') ? ev.datetime.slice(11, 16) : '';
       sub = `${I18N.t('item.' + ev.kind)}${time ? ' · ' + time : ''}${ev.location ? ' · ' + ev.location : ''}`;
       color = ev.kind === 'meeting' ? '#bc8cff' : '#d29922';
@@ -489,11 +688,19 @@ const App = {
       color = type.color || color;
       title = a.title;
       location = a.location;
-      const phase = entry.type === 'report-start' || entry.phase === 'report'
-        ? I18N.t('side.reporting') : I18N.t('side.audit_ongoing');
+      const isReport = entry.type === 'report-start' || entry.phase === 'report';
+      const phase = isReport ? I18N.t('side.reporting') : I18N.t('side.audit_ongoing');
+      dayStr = entry.sort ? entry.sort.slice(0, 10)
+        : (isReport ? a.report_start : a.audit_start);
       const typeName = I18N.lang === 'es' ? type.name_es : type.name_en;
       sub = `${phase} · ${typeName || ''}${a.location ? ' · ' + a.location : ''}`;
       onclick = () => App.openItemModal('audit', a);
+    }
+
+    // En listas sin agrupar por día (p. ej. "Próximo") anteponer el día
+    if (showDate && dayStr) {
+      const d = this.shortDay(dayStr);
+      if (d) sub = `${d} · ${sub}`;
     }
 
     el.style.borderLeftColor = color;
@@ -566,11 +773,11 @@ const App = {
       todayEntries.forEach((e) => todayList.appendChild(this.sideItem(e, this.state.data)));
     }
 
-    // Próximos 14 días: inicios de auditoría/informe y eventos
+    // Próximos 7 días (1 semana): inicios de auditoría/informe y eventos
     const upList = this.$('upcoming-list');
     upList.innerHTML = '';
     const upcoming = [];
-    for (let i = 1; i <= 14; i++) {
+    for (let i = 1; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
       const ds = Cal.fmt(d);
@@ -589,11 +796,11 @@ const App = {
       upList.innerHTML = `<p class="empty-hint">${I18N.t('side.empty')}</p>`;
     } else {
       upcoming.sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 8)
-        .forEach((e) => upList.appendChild(this.sideItem(e, this.state.data)));
+        .forEach((e) => upList.appendChild(this.sideItem(e, this.state.data, true)));
     }
 
-    // Lista de tareas
-    this.renderTodos('side-todos', 6);
+    // Lista de tareas (solo grupo Hoy)
+    this.renderTodos('side-todos', 6, true);
 
     // Últimas notas rápidas
     const notesBox = this.$('side-notes');
@@ -690,6 +897,7 @@ const App = {
 
   async openItemModal(kind, existing = null, presetDate = null) {
     this.state.editing = existing ? { kind, id: existing.id } : null;
+    this._editingSeries = Boolean(existing && existing.series_id);
     this.$('item-form').reset();
     this.$('item-delete').classList.toggle('hidden', !existing);
     // En edición no se cambia de pestaña
@@ -699,6 +907,15 @@ const App = {
     this.fillTypeSelect();
     this.fillAuditLinkSelect();
     this.renderTeammateChips(existing && kind === 'audit' ? existing.teammate_ids : []);
+
+    // La recurrencia solo se define al crear (no al editar una ocurrencia)
+    document.querySelectorAll('#item-form .only-create').forEach((el) =>
+      el.classList.toggle('hidden', Boolean(existing)));
+    this.$('item-recur').value = '';
+    this.$('item-recur-interval').value = '1';
+    this.$('item-recur-until').value = '';
+    this.$('item-recur-count').value = '';
+    this.syncRecurWhen();
 
     if (existing) {
       this.$('item-id').value = existing.id;
@@ -803,6 +1020,12 @@ const App = {
     this.renderOffsetChips('reminder-chips', this.state.offsets);
   },
 
+  syncRecurWhen() {
+    const on = Boolean(this.$('item-recur').value);
+    document.querySelectorAll('#item-form .recur-when').forEach((el) =>
+      el.classList.toggle('hidden', !on));
+  },
+
   /* Conecta un grupo preset+custom+botón con una lista de offsets. */
   bindOffsetControls(presetId, customId, addBtnId, getOffsets, boxId) {
     this.$(presetId).addEventListener('change', () => {
@@ -881,6 +1104,14 @@ const App = {
             : false;
           await API.put(`/api/events/${editing.id}`, body);
         } else {
+          const freq = this.$('item-recur').value;
+          if (freq) {
+            body.recurrence = freq;
+            body.rec_interval = Number(this.$('item-recur-interval').value) || 1;
+            body.rec_until = this.$('item-recur-until').value || null;
+            body.rec_count = this.$('item-recur-count').value
+              ? Number(this.$('item-recur-count').value) : null;
+          }
           await API.post('/api/events', body);
         }
       }
@@ -893,10 +1124,27 @@ const App = {
   },
 
   async deleteItem() {
-    if (!this.state.editing || !confirm(I18N.t('form.confirm_delete'))) return;
+    if (!this.state.editing) return;
     const { kind, id } = this.state.editing;
-    const path = kind === 'audit' ? `/api/audits/${id}`
-      : kind === 'vacation' ? `/api/vacations/${id}` : `/api/events/${id}`;
+    // Evento de una serie: preguntar si borrar solo esta o toda la serie
+    const inSeries = (kind === 'meeting' || kind === 'task') &&
+      this._editingSeries;
+    let path;
+    if (kind === 'audit') path = `/api/audits/${id}`;
+    else if (kind === 'vacation') path = `/api/vacations/${id}`;
+    else path = `/api/events/${id}`;
+
+    if (inSeries) {
+      const all = confirm(I18N.t('recur.delete_series_confirm'));
+      // Aceptar = toda la serie; Cancelar = solo esta (tras confirmar)
+      if (all) {
+        path += '?scope=series';
+      } else if (!confirm(I18N.t('recur.delete_one_confirm'))) {
+        return;
+      }
+    } else if (!confirm(I18N.t('form.confirm_delete'))) {
+      return;
+    }
     await API.del(path);
     this.closeModals();
     this.toast(I18N.t('toast.deleted'));
@@ -947,11 +1195,15 @@ const App = {
     return el;
   },
 
-  renderTodos(boxId, limit = null) {
+  renderTodos(boxId, limit = null, onlyHoy = false) {
     const box = this.$(boxId);
     if (!box) return;
     box.innerHTML = '';
     let items = this.state.todos;
+    if (onlyHoy) {
+      const hoy = this.hoyGroupId();
+      items = items.filter((t) => t.group_id === hoy);
+    }
     if (limit) items = items.filter((t) => !t.done).slice(0, limit);
     if (!items.length) {
       box.innerHTML = `<p class="empty-hint">${I18N.t('todos.empty')}</p>`;
@@ -962,10 +1214,11 @@ const App = {
 
   async reloadTodos() {
     this.state.todos = await API.get('/api/todos');
-    this.renderTodos('side-todos', 6);
+    this.renderTodos('side-todos', 6, true);
     if (!this.$('modal-todos').classList.contains('hidden')) {
       this.renderTodos('todos-list');
     }
+    if (this.state.view === 'tasks') this.renderTasks();
   },
 
   async addTodo(inputId) {
@@ -1183,6 +1436,10 @@ const App = {
       this.state.view = 'agenda';
       this.render();
     });
+    this.$('view-tasks').addEventListener('click', () => {
+      this.state.view = 'tasks';
+      this.render();
+    });
     this.$('view-hours').addEventListener('click', () => this.loadHours());
     this.$('btn-logout').addEventListener('click', async () => {
       await API.post('/api/auth/logout', {});
@@ -1245,6 +1502,18 @@ const App = {
       this.saveItem();
     });
     this.$('item-delete').addEventListener('click', () => this.deleteItem());
+    this.$('item-recur').addEventListener('change', () => this.syncRecurWhen());
+
+    // Recurrencia de tareas
+    this.$('tr-freq').addEventListener('change', () => {
+      const on = Boolean(this.$('tr-freq').value);
+      document.querySelectorAll('#todo-recur-form .tr-when').forEach((el) =>
+        el.classList.toggle('hidden', !on));
+    });
+    this.$('todo-recur-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.saveTodoRecurrence();
+    });
 
     // Avisos (modal de elemento y ajustes)
     this.bindOffsetControls('reminder-preset', 'reminder-custom',

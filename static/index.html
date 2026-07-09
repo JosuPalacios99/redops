@@ -59,6 +59,10 @@
       <line x1="11" y1="6" x2="21" y2="6"/><line x1="11" y1="13" x2="21" y2="13"/>
       <line x1="11" y1="20" x2="21" y2="20"/><polyline points="3 20 4.5 21.5 7 18.5"/>
     </symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24">
+      <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -104,6 +108,7 @@
       <div class="seg view-toggle">
         <button id="view-month" class="active" data-i18n="nav.month">Mes</button>
         <button id="view-agenda" data-i18n="nav.agenda">Agenda</button>
+        <button id="view-tasks" data-i18n="nav.tasks">Tareas</button>
         <button id="view-hours" data-i18n="nav.hours">Horas</button>
       </div>
       <div class="seg lang-toggle">
@@ -127,6 +132,7 @@
     <main>
       <div id="calendar-view"></div>
       <div id="agenda-view" class="hidden"></div>
+      <div id="tasks-view" class="hidden"></div>
       <div id="hours-view" class="hidden"></div>
     </main>
 
@@ -235,6 +241,29 @@
           <input id="item-done" type="checkbox">
           <span data-i18n="form.done">Completada</span>
         </label>
+        <fieldset class="recur-box only-create">
+          <legend data-i18n="recur.title">Repetir</legend>
+          <div class="grid-2">
+            <label><span data-i18n="recur.freq">Frecuencia</span>
+              <select id="item-recur">
+                <option value="" data-i18n="recur.none">No se repite</option>
+                <option value="daily" data-i18n="recur.daily">Diaria</option>
+                <option value="weekly" data-i18n="recur.weekly">Semanal</option>
+                <option value="monthly" data-i18n="recur.monthly">Mensual</option>
+              </select>
+            </label>
+            <label class="recur-when hidden"><span data-i18n="recur.interval">Cada (nº)</span>
+              <input id="item-recur-interval" type="number" min="1" value="1">
+            </label>
+          </div>
+          <div class="grid-2 recur-when hidden">
+            <label><span data-i18n="recur.until">Hasta (fecha)</span>
+              <input id="item-recur-until" type="date"></label>
+            <label><span data-i18n="recur.count">o nº de veces</span>
+              <input id="item-recur-count" type="number" min="1"></label>
+          </div>
+          <p class="form-hint recur-when hidden" data-i18n="recur.hint">Deja el fin vacío para repetir hasta un año.</p>
+        </fieldset>
       </div>
 
       <!-- campos de vacaciones -->
@@ -406,6 +435,37 @@
       <button type="button" id="todos-clear" class="btn btn-ghost" data-i18n="todos.clear_done">Quitar completadas</button>
       <span class="spacer"></span>
     </div>
+  </div>
+
+  <!-- Recurrencia de tarea -->
+  <div id="modal-todo-recur" class="modal hidden">
+    <div class="modal-head">
+      <h2 data-i18n="recur.task_title">Repetir tarea</h2>
+      <button class="btn btn-icon modal-close" aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <form id="todo-recur-form">
+      <input type="hidden" id="tr-id">
+      <label><span data-i18n="recur.freq">Frecuencia</span>
+        <select id="tr-freq">
+          <option value="" data-i18n="recur.none">No se repite</option>
+          <option value="daily" data-i18n="recur.daily">Diaria</option>
+          <option value="weekly" data-i18n="recur.weekly">Semanal</option>
+          <option value="monthly" data-i18n="recur.monthly">Mensual</option>
+        </select>
+      </label>
+      <div class="grid-2 tr-when hidden">
+        <label><span data-i18n="recur.interval">Cada (nº)</span>
+          <input id="tr-interval" type="number" min="1" value="1"></label>
+        <label><span data-i18n="recur.next">Próxima fecha</span>
+          <input id="tr-due" type="date"></label>
+      </div>
+      <p class="form-hint tr-when hidden" data-i18n="recur.task_hint">Al pasar la fecha, la tarea vuelve a pendiente para el nuevo periodo.</p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost modal-close" data-i18n="form.cancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary" data-i18n="form.save">Guardar</button>
+      </div>
+    </form>
   </div>
 
   <!-- Detalle de día -->

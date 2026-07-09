@@ -103,6 +103,11 @@ const Cal = {
         items.appendChild(more);
       }
 
+      // Tareas del grupo Hoy: solo en la celda de hoy
+      if (dateStr === todayStr && (data.todayTasks || []).length) {
+        data.todayTasks.forEach((t) => items.appendChild(this.taskChip(t, handlers)));
+      }
+
       cell.appendChild(items);
       grid.appendChild(cell);
     }
@@ -147,11 +152,25 @@ const Cal = {
     return bar;
   },
 
+  taskChip(t, handlers) {
+    const chip = document.createElement('div');
+    chip.className = 'cal-chip task-chip';
+    chip.innerHTML = `<span class="tc-box"><svg class="icon"><use href="#i-check"/></svg></span><span class="tc-text"></span>`;
+    chip.querySelector('.tc-text').textContent = t.content;
+    chip.title = t.content;
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (handlers.onTaskToggle) handlers.onTaskToggle(t);
+    });
+    return chip;
+  },
+
   eventChip(ev, handlers) {
     const chip = document.createElement('div');
     chip.className = `cal-chip ${ev.kind} ${ev.done ? 'done' : ''}`;
     const time = ev.datetime.includes('T') ? ev.datetime.slice(11, 16) + ' ' : '';
-    chip.textContent = `${time}${ev.title}`;
+    const rep = ev.series_id ? '🔁 ' : '';
+    chip.textContent = `${rep}${time}${ev.title}`;
     chip.title = chip.textContent;
     chip.addEventListener('click', (e) => {
       e.stopPropagation();

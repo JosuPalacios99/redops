@@ -656,6 +656,69 @@ main { flex: 1; padding: 18px 20px 90px; min-width: 0; }
 .hours-grid tfoot th, .hours-grid tfoot td { background: var(--surface-2); padding: 8px 6px; }
 .hours-grid .grand-sum { color: var(--accent); }
 
+/* ---------- recurrencia ---------- */
+.recur-box {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 12px 14px; margin-top: 4px;
+}
+.recur-box legend { padding: 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.rec-badge {
+  display: inline-flex; align-items: center; gap: 3px; margin-left: 8px;
+  font-size: 11px; color: var(--meeting); vertical-align: middle;
+}
+.rec-badge .icon { width: 12px; height: 12px; }
+.task-rec { padding: 5px; color: var(--faint); }
+.task-rec .icon { width: 15px; height: 15px; }
+.task-rec.on { color: var(--meeting); }
+
+/* ---------- vista de tareas ---------- */
+.tasks-toolbar { margin-bottom: 14px; }
+.tasks-toolbar .inline-form { margin-top: 0; max-width: 360px; }
+
+.tasks-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-items: start;
+}
+.task-group {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 12px; box-shadow: var(--shadow-1);
+}
+.task-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.task-group-head h3 { font-size: 14px; font-weight: 600; }
+.tg-count {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  background: var(--surface-2); border-radius: 999px; padding: 1px 8px;
+}
+.task-group-head .tg-del { margin-left: auto; padding: 5px; }
+.task-group-head .tg-del .icon { width: 15px; height: 15px; }
+.task-group .todo-list { margin-bottom: 10px; min-height: 8px; }
+.task-group .todo-quickadd { display: flex; gap: 6px; }
+.task-group .todo-quickadd input { flex: 1; }
+.task-move {
+  font-family: inherit; font-size: 11px; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 2px 4px; max-width: 120px; cursor: pointer;
+}
+/* La fila de tarea: texto en su línea; controles bajan si no caben */
+.task-group .todo-item { flex-wrap: wrap; row-gap: 8px; align-items: center; }
+.task-group .todo-item .todo-text {
+  flex: 1 1 60%; min-width: 130px; overflow-wrap: anywhere; word-break: normal;
+}
+.task-group .todo-item .task-move { margin-left: auto; }
+.task-group .todo-item .task-rec,
+.task-group .todo-item .del { flex-shrink: 0; }
+
+/* Tareas de hoy en el calendario */
+.cal-chip.task-chip { display: flex; align-items: center; gap: 5px; background: var(--surface-3); }
+.task-chip .tc-box {
+  display: inline-flex; width: 13px; height: 13px; flex-shrink: 0;
+  border: 1.5px solid var(--muted); border-radius: 3px;
+}
+.task-chip .tc-box .icon { width: 11px; height: 11px; opacity: 0; }
+.task-chip:hover .tc-box .icon { opacity: .5; }
+.task-chip .tc-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media (max-width: 900px) {
   .layout { flex-direction: column; }
   main { order: 1; width: 100%; padding: 14px 14px 90px; }

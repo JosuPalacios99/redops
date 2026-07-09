@@ -13,7 +13,28 @@
   "nav.month": "Month",
   "nav.agenda": "Agenda",
   "nav.hours": "Hours",
+  "nav.tasks": "Tasks",
   "nav.logout": "Sign out",
+
+  "taskgroup.today": "Today",
+  "tasks.new_group": "New category…",
+  "tasks.group_delete_confirm": "Delete this category? Its tasks move to Today.",
+
+  "recur.title": "Repeat",
+  "recur.task_title": "Repeat task",
+  "recur.freq": "Frequency",
+  "recur.none": "Does not repeat",
+  "recur.daily": "Daily",
+  "recur.weekly": "Weekly",
+  "recur.monthly": "Monthly",
+  "recur.interval": "Every (n)",
+  "recur.until": "Until (date)",
+  "recur.count": "or nº of times",
+  "recur.next": "Next date",
+  "recur.hint": "Leave the end empty to repeat for up to a year.",
+  "recur.task_hint": "When the date passes, the task returns to pending for the new period.",
+  "recur.delete_series_confirm": "This item repeats. Delete the WHOLE series?  (OK = whole series · Cancel = choose just this one)",
+  "recur.delete_one_confirm": "Delete just this occurrence?",
   "nav.theme": "Toggle light/dark theme",
 
   "hours.task": "Task",
@@ -37,7 +58,7 @@
 
   "item.audit": "Audit",
   "item.meeting": "Meeting",
-  "item.task": "Task",
+  "item.task": "Event",
   "item.vacation": "Vacation",
 
   "form.title": "Title / client",

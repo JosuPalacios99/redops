@@ -13,7 +13,28 @@
   "nav.month": "Mes",
   "nav.agenda": "Agenda",
   "nav.hours": "Horas",
+  "nav.tasks": "Tareas",
   "nav.logout": "Cerrar sesión",
+
+  "taskgroup.today": "Hoy",
+  "tasks.new_group": "Nueva categoría…",
+  "tasks.group_delete_confirm": "¿Borrar la categoría? Sus tareas pasan a Hoy.",
+
+  "recur.title": "Repetir",
+  "recur.task_title": "Repetir tarea",
+  "recur.freq": "Frecuencia",
+  "recur.none": "No se repite",
+  "recur.daily": "Diaria",
+  "recur.weekly": "Semanal",
+  "recur.monthly": "Mensual",
+  "recur.interval": "Cada (nº)",
+  "recur.until": "Hasta (fecha)",
+  "recur.count": "o nº de veces",
+  "recur.next": "Próxima fecha",
+  "recur.hint": "Deja el fin vacío para repetir hasta un año.",
+  "recur.task_hint": "Al pasar la fecha, la tarea vuelve a pendiente para el nuevo periodo.",
+  "recur.delete_series_confirm": "Esta cita se repite. ¿Borrar TODA la serie?  (Aceptar = toda la serie · Cancelar = elegir solo esta)",
+  "recur.delete_one_confirm": "¿Borrar solo esta ocurrencia?",
   "nav.theme": "Cambiar tema claro/oscuro",
 
   "hours.task": "Tarea",
@@ -37,7 +58,7 @@
 
   "item.audit": "Auditoría",
   "item.meeting": "Reunión",
-  "item.task": "Tarea",
+  "item.task": "Evento",
   "item.vacation": "Vacaciones",
 
   "form.title": "Título / cliente",
