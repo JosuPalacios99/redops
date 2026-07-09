@@ -59,6 +59,56 @@ const App = {
     this.state.defaultReminders = settings.default_reminders;
     if (settings.lang !== I18N.lang) await I18N.load(settings.lang);
     await this.refresh();
+    this.initReminders();
+  },
+
+  // ------------------------------------------------------------ avisos (navegador)
+
+  requestNotifyPermission() {
+    if (!('Notification' in window) || Notification.permission !== 'default') return;
+    Notification.requestPermission().catch(() => {});
+    // Algunos navegadores exigen un gesto: reintentar en el primer clic
+    const once = () => {
+      if (Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+      document.removeEventListener('click', once);
+    };
+    document.addEventListener('click', once, { once: true });
+  },
+
+  initReminders() {
+    this.requestNotifyPermission();
+    this.startReminderPolling();
+  },
+
+  startReminderPolling() {
+    this.stopReminderPolling();
+    this.pollDueReminders();
+    this._reminderTimer = setInterval(() => this.pollDueReminders(), 30000);
+  },
+
+  stopReminderPolling() {
+    if (this._reminderTimer) {
+      clearInterval(this._reminderTimer);
+      this._reminderTimer = null;
+    }
+  },
+
+  async pollDueReminders() {
+    try {
+      const due = await API.get('/api/reminders/due');
+      if (!due.length) return;
+      const granted = ('Notification' in window) && Notification.permission === 'granted';
+      due.forEach((r) => {
+        if (granted) {
+          try { new Notification(r.title, { body: r.body }); } catch (_) { /* noop */ }
+        } else {
+          this.toast(`${r.title} — ${r.body}`);
+        }
+      });
+      await API.post('/api/reminders/ack', { ids: due.map((r) => r.id) });
+    } catch (_) {
+      /* silencioso: 401 (sesión caduca) o red; el poller reintenta */
+    }
   },
 
   // ------------------------------------------------------------ datos
@@ -1411,7 +1461,10 @@ const App = {
       }
     });
 
-    window.addEventListener('session-expired', () => this.showAuth(false));
+    window.addEventListener('session-expired', () => {
+      this.stopReminderPolling();
+      this.showAuth(false);
+    });
     window.addEventListener('lang-changed', () => {
       if (!this.$('screen-app').classList.contains('hidden')) {
         API.put('/api/settings', { lang: I18N.lang }).catch(() => {});
@@ -1442,6 +1495,7 @@ const App = {
     });
     this.$('view-hours').addEventListener('click', () => this.loadHours());
     this.$('btn-logout').addEventListener('click', async () => {
+      this.stopReminderPolling();
       await API.post('/api/auth/logout', {});
       this.showAuth(false);
     });

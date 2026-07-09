@@ -55,11 +55,14 @@ Para usar otro puerto:
 - **Gestión de horas**: rejilla semanal para imputar las horas dedicadas a cada
   auditoría, reunión, tarea o categoría propia (formación, gestión…); totales
   por día y por tarea y botón para copiar el resumen de la semana.
-- **Avisos de escritorio** multiplataforma: saltan aunque el navegador esté
-  cerrado, mientras el servidor corra. En Linux vía `notify-send`, en Windows
-  vía globo en la bandeja del sistema (PowerShell) y en macOS vía `osascript`.
-  Cada elemento admite varios avisos (15 min, 1 h, 1 día, 1 semana antes o un
-  valor personalizado) y en Ajustes se configuran los avisos por defecto.
+- **Avisos** con dos canales automáticos: en Linux/macOS nativos, aviso de
+  escritorio (`notify-send` / `osascript`) que salta aunque el navegador esté
+  cerrado. Donde eso no está disponible (WSL, Windows), el aviso lo muestra el
+  **navegador** (Web Notifications) mientras haya una pestaña de RedOps abierta
+  —acepta el permiso de notificaciones la primera vez—. Nunca se duplica: cada
+  aviso lo entrega un solo canal. Cada elemento admite varios avisos (15 min,
+  1 h, 1 día, 1 semana antes o un valor personalizado) y en Ajustes se
+  configuran los avisos por defecto.
 - **Español / English** conmutable desde la cabecera.
 - **Login** con sesión de 30 días (cookie HttpOnly, PBKDF2 para la contraseña).
 

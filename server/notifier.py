@@ -104,49 +104,37 @@ def _build_message(conn, kind: str, target_id: int, lang: str) -> tuple[str, str
     return title, body
 
 
-# PowerShell: globo de notificación en la bandeja del sistema (sin dependencias extra).
-_WIN_PS = (
-    "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
-    "$n=New-Object System.Windows.Forms.NotifyIcon;"
-    "$n.Icon=[System.Drawing.SystemIcons]::Information;"
-    "$n.Visible=$true;"
-    "$n.ShowBalloonTip(8000,$env:REDOPS_TITLE,$env:REDOPS_BODY,"
-    "[System.Windows.Forms.ToolTipIcon]::Info);"
-    "Start-Sleep -Seconds 6;$n.Dispose()"
-)
-
-
-async def _notify_windows(title: str, body: str) -> None:
-    exe = shutil.which("powershell") or shutil.which("pwsh")
-    if not exe:
-        print(f"[notifier] PowerShell no disponible. {title} — {body}")
-        return
-    env = {**os.environ, "REDOPS_TITLE": title, "REDOPS_BODY": body}
-    proc = await asyncio.create_subprocess_exec(
-        exe, "-NoProfile", "-NonInteractive", "-Command", _WIN_PS, env=env
-    )
-    await proc.wait()
-
-
-async def _notify(title: str, body: str) -> None:
+def _is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
     try:
-        if sys.platform == "win32":
-            await _notify_windows(title, body)
-            return
+        with open("/proc/version", encoding="utf-8", errors="ignore") as f:
+            return "microsoft" in f.read().lower()
+    except OSError:
+        return False
+
+
+async def _deliver(title: str, body: str) -> bool:
+    """Entrega el aviso por escritorio nativo. Devuelve True solo si lo entregó.
+
+    Si no hay canal de escritorio (WSL, Windows, sin notify-send), devuelve False
+    y el aviso lo mostrará el navegador vía /api/reminders/due.
+    """
+    try:
         if sys.platform == "darwin" and shutil.which("osascript"):
             script = f'display notification {body!r} with title {title!r}'
             proc = await asyncio.create_subprocess_exec("osascript", "-e", script)
             await proc.wait()
-            return
-        if not shutil.which("notify-send"):
-            print(f"[notifier] notify-send no disponible. {title} — {body}")
-            return
-        proc = await asyncio.create_subprocess_exec(
-            "notify-send", "--urgency=critical", "--app-name=Agenda", title, body
-        )
-        await proc.wait()
+            return proc.returncode == 0
+        if sys.platform.startswith("linux") and not _is_wsl() and shutil.which("notify-send"):
+            proc = await asyncio.create_subprocess_exec(
+                "notify-send", "--urgency=critical", "--app-name=Agenda", title, body
+            )
+            await proc.wait()
+            return proc.returncode == 0
     except Exception as exc:  # noqa: BLE001 — un fallo de aviso no debe romper el bucle
-        print(f"[notifier] no se pudo notificar: {exc}")
+        print(f"[notifier] no se pudo notificar por escritorio: {exc}")
+    return False
 
 
 def _mark_stale_on_startup() -> None:
@@ -183,13 +171,14 @@ async def _check_once() -> None:
             if now < target - timedelta(minutes=rem["offset_min"]):
                 continue
             msg = _build_message(conn, rem["target_kind"], rem["target_id"], lang)
-            conn.execute(
-                "UPDATE reminders SET fired_at = ? WHERE id = ?",
-                (now.isoformat(timespec="seconds"), rem["id"]),
-            )
-            conn.commit()
-            if msg:
-                await _notify(*msg)
+            # Solo marcamos como entregado si el escritorio lo mostró de verdad.
+            # Si no (WSL/Windows), se deja sin marcar y lo recoge el navegador.
+            if msg and await _deliver(*msg):
+                conn.execute(
+                    "UPDATE reminders SET fired_at = ? WHERE id = ?",
+                    (now.isoformat(timespec="seconds"), rem["id"]),
+                )
+                conn.commit()
     finally:
         conn.close()
 

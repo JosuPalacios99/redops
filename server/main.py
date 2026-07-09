@@ -112,6 +112,10 @@ class ReminderIn(BaseModel):
     offset_min: int
 
 
+class AckIn(BaseModel):
+    ids: list[int] = []
+
+
 class SettingsIn(BaseModel):
     lang: str | None = None
     default_reminders: list[int] | None = None
@@ -782,6 +786,50 @@ def delete_reminder(reminder_id: int):
         conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
         conn.commit()
         return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.get("/api/reminders/due", dependencies=[protected])
+def reminders_due():
+    """Avisos vencidos y aún no entregados, para mostrarlos en el navegador.
+
+    No marca nada: el navegador confirma con POST /api/reminders/ack. Solo llegan
+    aquí los que el canal de escritorio no entregó (fired_at sigue nulo)."""
+    conn = db.connect()
+    try:
+        user = db.get_user(conn)
+        lang = user["lang"] if user else "es"
+        now = datetime.now()
+        out = []
+        for rem in conn.execute("SELECT * FROM reminders WHERE fired_at IS NULL").fetchall():
+            target = notifier._target_datetime(conn, rem["target_kind"], rem["target_id"])
+            if target is None:
+                continue
+            if now < target - timedelta(minutes=rem["offset_min"]):
+                continue
+            msg = notifier._build_message(conn, rem["target_kind"], rem["target_id"], lang)
+            if msg:
+                out.append({"id": rem["id"], "title": msg[0], "body": msg[1]})
+        return out
+    finally:
+        conn.close()
+
+
+@app.post("/api/reminders/ack", dependencies=[protected])
+def ack_reminders(body: AckIn):
+    if not body.ids:
+        return {"ok": True, "acked": 0}
+    conn = db.connect()
+    try:
+        now = datetime.now().isoformat(timespec="seconds")
+        placeholders = ",".join("?" * len(body.ids))
+        conn.execute(
+            f"UPDATE reminders SET fired_at = ? WHERE id IN ({placeholders})"
+            " AND fired_at IS NULL",
+            [now, *body.ids])
+        conn.commit()
+        return {"ok": True, "acked": len(body.ids)}
     finally:
         conn.close()
 
