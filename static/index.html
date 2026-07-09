@@ -104,6 +104,7 @@
       <div class="seg view-toggle">
         <button id="view-month" class="active" data-i18n="nav.month">Mes</button>
         <button id="view-agenda" data-i18n="nav.agenda">Agenda</button>
+        <button id="view-hours" data-i18n="nav.hours">Horas</button>
       </div>
       <div class="seg lang-toggle">
         <button class="lang-btn" data-lang="es">ES</button>
@@ -126,6 +127,7 @@
     <main>
       <div id="calendar-view"></div>
       <div id="agenda-view" class="hidden"></div>
+      <div id="hours-view" class="hidden"></div>
     </main>
 
     <aside class="sidebar">
@@ -293,6 +295,7 @@
       <button class="tab active" data-tab="general" data-i18n="settings.general">General</button>
       <button class="tab" data-tab="teammates" data-i18n="settings.teammates">Compañeros</button>
       <button class="tab" data-tab="types" data-i18n="settings.types">Tipos</button>
+      <button class="tab" data-tab="categories" data-i18n="settings.categories">Categorías</button>
       <button class="tab" data-tab="password" data-i18n="settings.password">Contraseña</button>
     </div>
 
@@ -337,6 +340,16 @@
         <input id="type-name-es" type="text" maxlength="60" placeholder="Nombre (ES)" required>
         <input id="type-name-en" type="text" maxlength="60" placeholder="Name (EN)" required>
         <input id="type-color" type="color" value="#bc8cff">
+        <button class="btn btn-primary" data-i18n="form.add">Añadir</button>
+      </form>
+    </div>
+
+    <div class="settings-pane hidden" data-pane="categories">
+      <p class="form-hint" data-i18n="settings.categories_hint" style="margin:0 0 12px">Categorías propias para imputar horas fuera de auditorías (formación, gestión, reuniones internas…).</p>
+      <div id="time-cats-list" class="manage-list"></div>
+      <form id="time-cat-form" class="inline-form">
+        <input id="time-cat-name" type="text" maxlength="60" data-i18n-placeholder="settings.cat_name" placeholder="Nombre" required>
+        <input id="time-cat-color" type="color" value="#8b949e">
         <button class="btn btn-primary" data-i18n="form.add">Añadir</button>
       </form>
     </div>

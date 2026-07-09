@@ -1,6 +1,8 @@
 """Bucle en segundo plano: recordatorios vencidos -> notificación de escritorio."""
 import asyncio
+import os
 import shutil
+import sys
 from datetime import datetime, timedelta
 
 from . import db
@@ -102,14 +104,49 @@ def _build_message(conn, kind: str, target_id: int, lang: str) -> tuple[str, str
     return title, body
 
 
-async def _notify(title: str, body: str) -> None:
-    if not shutil.which("notify-send"):
-        print(f"[notifier] notify-send no disponible. {title} — {body}")
+# PowerShell: globo de notificación en la bandeja del sistema (sin dependencias extra).
+_WIN_PS = (
+    "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+    "$n=New-Object System.Windows.Forms.NotifyIcon;"
+    "$n.Icon=[System.Drawing.SystemIcons]::Information;"
+    "$n.Visible=$true;"
+    "$n.ShowBalloonTip(8000,$env:REDOPS_TITLE,$env:REDOPS_BODY,"
+    "[System.Windows.Forms.ToolTipIcon]::Info);"
+    "Start-Sleep -Seconds 6;$n.Dispose()"
+)
+
+
+async def _notify_windows(title: str, body: str) -> None:
+    exe = shutil.which("powershell") or shutil.which("pwsh")
+    if not exe:
+        print(f"[notifier] PowerShell no disponible. {title} — {body}")
         return
+    env = {**os.environ, "REDOPS_TITLE": title, "REDOPS_BODY": body}
     proc = await asyncio.create_subprocess_exec(
-        "notify-send", "--urgency=critical", "--app-name=Agenda", title, body
+        exe, "-NoProfile", "-NonInteractive", "-Command", _WIN_PS, env=env
     )
     await proc.wait()
+
+
+async def _notify(title: str, body: str) -> None:
+    try:
+        if sys.platform == "win32":
+            await _notify_windows(title, body)
+            return
+        if sys.platform == "darwin" and shutil.which("osascript"):
+            script = f'display notification {body!r} with title {title!r}'
+            proc = await asyncio.create_subprocess_exec("osascript", "-e", script)
+            await proc.wait()
+            return
+        if not shutil.which("notify-send"):
+            print(f"[notifier] notify-send no disponible. {title} — {body}")
+            return
+        proc = await asyncio.create_subprocess_exec(
+            "notify-send", "--urgency=critical", "--app-name=Agenda", title, body
+        )
+        await proc.wait()
+    except Exception as exc:  # noqa: BLE001 — un fallo de aviso no debe romper el bucle
+        print(f"[notifier] no se pudo notificar: {exc}")
 
 
 def _mark_stale_on_startup() -> None:

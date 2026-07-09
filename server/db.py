@@ -97,6 +97,31 @@ CREATE TABLE IF NOT EXISTS reminders (
     offset_min INTEGER NOT NULL,
     fired_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS time_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#8b949e',
+    archived INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    audit_id INTEGER REFERENCES audits(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES time_categories(id) ON DELETE CASCADE,
+    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    hours REAL NOT NULL,
+    note TEXT,
+    CHECK ((audit_id IS NOT NULL) + (category_id IS NOT NULL) + (event_id IS NOT NULL) = 1)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entry_audit
+    ON time_entries(day, audit_id) WHERE audit_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entry_cat
+    ON time_entries(day, category_id) WHERE category_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entry_event
+    ON time_entries(day, event_id) WHERE event_id IS NOT NULL;
 """
 
 BUILTIN_TYPES = [
@@ -135,9 +160,37 @@ def _migrate_reminders_check(conn: sqlite3.Connection) -> None:
         """)
 
 
+def _migrate_time_entries_event(conn: sqlite3.Connection) -> None:
+    """BDs con time_entries previo a poder imputar a eventos: añadir event_id."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='time_entries'"
+    ).fetchone()
+    if row and "event_id" not in row["sql"]:
+        conn.executescript("""
+            DROP INDEX IF EXISTS idx_time_entry_audit;
+            DROP INDEX IF EXISTS idx_time_entry_cat;
+            CREATE TABLE time_entries_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                day TEXT NOT NULL,
+                audit_id INTEGER REFERENCES audits(id) ON DELETE CASCADE,
+                category_id INTEGER REFERENCES time_categories(id) ON DELETE CASCADE,
+                event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+                hours REAL NOT NULL,
+                note TEXT,
+                CHECK ((audit_id IS NOT NULL) + (category_id IS NOT NULL)
+                       + (event_id IS NOT NULL) = 1)
+            );
+            INSERT INTO time_entries_new (id, day, audit_id, category_id, hours, note)
+                SELECT id, day, audit_id, category_id, hours, note FROM time_entries;
+            DROP TABLE time_entries;
+            ALTER TABLE time_entries_new RENAME TO time_entries;
+        """)
+
+
 def init_db() -> None:
     conn = connect()
     try:
+        _migrate_time_entries_event(conn)
         conn.executescript(SCHEMA)
         _migrate_reminders_check(conn)
         if conn.execute("SELECT COUNT(*) FROM audit_types").fetchone()[0] == 0:

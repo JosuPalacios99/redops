@@ -2,6 +2,7 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -94,6 +95,20 @@ class ReminderIn(BaseModel):
 class SettingsIn(BaseModel):
     lang: str | None = None
     default_reminders: list[int] | None = None
+
+
+class TimeCategoryIn(BaseModel):
+    name: str
+    color: str = "#8b949e"
+
+
+class TimeEntryIn(BaseModel):
+    day: str
+    audit_id: int | None = None
+    category_id: int | None = None
+    event_id: int | None = None
+    hours: float
+    note: str | None = None
 
 
 # ---------------------------------------------------------------- helpers
@@ -668,6 +683,125 @@ def calendar(date_from: str, date_to: str):
         teammates = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM teammates")}
         return {"audits": audits, "events": events, "vacations": vacations,
                 "types": types, "teammates": teammates}
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- gestión de horas
+
+@app.get("/api/time/categories", dependencies=[protected])
+def list_time_categories():
+    conn = db.connect()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, name, color FROM time_categories WHERE archived = 0 ORDER BY name")]
+    finally:
+        conn.close()
+
+
+@app.post("/api/time/categories", dependencies=[protected])
+def create_time_category(body: TimeCategoryIn):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="empty_name")
+    conn = db.connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO time_categories (name, color) VALUES (?, ?)", (name, body.color))
+        conn.commit()
+        return dict(conn.execute(
+            "SELECT id, name, color FROM time_categories WHERE id = ?",
+            (cur.lastrowid,)).fetchone())
+    finally:
+        conn.close()
+
+
+@app.put("/api/time/categories/{cat_id}", dependencies=[protected])
+def update_time_category(cat_id: int, body: TimeCategoryIn):
+    conn = db.connect()
+    try:
+        if not conn.execute(
+                "SELECT 1 FROM time_categories WHERE id = ?", (cat_id,)).fetchone():
+            raise HTTPException(status_code=404)
+        conn.execute("UPDATE time_categories SET name=?, color=? WHERE id=?",
+                     (body.name.strip(), body.color, cat_id))
+        conn.commit()
+        return dict(conn.execute(
+            "SELECT id, name, color FROM time_categories WHERE id = ?",
+            (cat_id,)).fetchone())
+    finally:
+        conn.close()
+
+
+@app.delete("/api/time/categories/{cat_id}", dependencies=[protected])
+def delete_time_category(cat_id: int):
+    conn = db.connect()
+    try:
+        conn.execute("DELETE FROM time_categories WHERE id = ?", (cat_id,))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.get("/api/time/week", dependencies=[protected])
+def time_week(start: str):
+    """Rejilla semanal: 'start' es el lunes (YYYY-MM-DD)."""
+    try:
+        start_d = datetime.strptime(start, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="bad_date")
+    days = [(start_d + timedelta(days=i)).isoformat() for i in range(7)]
+    conn = db.connect()
+    try:
+        categories = [dict(r) for r in conn.execute(
+            "SELECT id, name, color FROM time_categories WHERE archived = 0 ORDER BY name")]
+        audits = [dict(r) for r in conn.execute(
+            "SELECT a.id, a.title, a.audit_start, a.audit_end, a.report_start,"
+            " a.report_end, t.color AS color FROM audits a"
+            " JOIN audit_types t ON t.id = a.type_id ORDER BY a.audit_start DESC")]
+        events = [dict(r) for r in conn.execute(
+            "SELECT id, title, kind, datetime FROM events"
+            " WHERE date(datetime) BETWEEN ? AND ? ORDER BY datetime",
+            (days[0], days[-1]))]
+        entries = [dict(r) for r in conn.execute(
+            "SELECT day, audit_id, category_id, event_id, hours, note FROM time_entries"
+            " WHERE day BETWEEN ? AND ?", (days[0], days[-1]))]
+        return {"start": start, "days": days, "categories": categories,
+                "audits": audits, "events": events, "entries": entries}
+    finally:
+        conn.close()
+
+
+@app.put("/api/time/entry", dependencies=[protected])
+def upsert_time_entry(body: TimeEntryIn):
+    """Fija/actualiza la celda (tarea, día). hours<=0 borra la celda."""
+    targets = {"audit_id": body.audit_id, "category_id": body.category_id,
+               "event_id": body.event_id}
+    chosen = [(c, v) for c, v in targets.items() if v is not None]
+    if len(chosen) != 1:
+        raise HTTPException(status_code=400, detail="need_exactly_one_target")
+    col, val = chosen[0]
+    conn = db.connect()
+    try:
+        existing = conn.execute(
+            f"SELECT id FROM time_entries WHERE day = ? AND {col} = ?",
+            (body.day, val)).fetchone()
+        if body.hours is None or body.hours <= 0:
+            if existing:
+                conn.execute("DELETE FROM time_entries WHERE id = ?", (existing["id"],))
+                conn.commit()
+            return {"ok": True, "deleted": True}
+        note = (body.note or "").strip() or None
+        if existing:
+            conn.execute("UPDATE time_entries SET hours = ?, note = ? WHERE id = ?",
+                         (body.hours, note, existing["id"]))
+        else:
+            conn.execute(
+                f"INSERT INTO time_entries (day, {col}, hours, note) VALUES (?, ?, ?, ?)",
+                (body.day, val, body.hours, note))
+        conn.commit()
+        return {"ok": True}
     finally:
         conn.close()
 

@@ -600,6 +600,62 @@ main { flex: 1; padding: 18px 20px 90px; min-width: 0; }
   .sidebar { width: 246px; }
 }
 
+/* ---------- gestión de horas ---------- */
+.hours-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.hours-addrow {
+  font-family: inherit; font-size: 13px;
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 7px 10px; cursor: pointer; max-width: 260px;
+}
+.hours-weektotal { margin-left: auto; color: var(--muted); font-weight: 600; }
+
+.hours-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+.hours-grid { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+.hours-grid th, .hours-grid td { border: 1px solid var(--border); text-align: center; }
+
+.hours-grid thead th {
+  background: var(--surface-2); padding: 8px 6px; font-weight: 600; color: var(--muted);
+  position: sticky; top: 0;
+}
+.hours-grid thead .day-col { display: table-cell; }
+.hours-grid .dow { display: block; text-transform: capitalize; font-size: 11px; }
+.hours-grid .dnum { display: block; font-size: 15px; color: var(--fg); }
+.hours-grid th.today, .hours-grid td.today { background: var(--accent-soft); }
+.hours-grid th.weekend { color: var(--faint); }
+
+.hours-grid .task-col {
+  text-align: left; padding: 8px 10px; min-width: 170px;
+  position: sticky; left: 0; background: var(--surface); z-index: 1;
+}
+.hours-grid thead .task-col { background: var(--surface-2); z-index: 2; }
+.hours-grid tbody .task-col { font-weight: 500; }
+.row-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+.row-name { vertical-align: middle; }
+
+.hours-grid td.cell { padding: 0; position: relative; }
+.cell-input {
+  width: 100%; height: 100%; min-height: 38px;
+  border: none; background: transparent; color: var(--fg);
+  text-align: center; font-family: var(--font-mono); font-size: 13px;
+  padding: 8px 4px;
+}
+.cell-input:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--surface-2); }
+.hours-grid td.has-note::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+}
+
+.hours-grid .row-sum, .hours-grid .day-sum, .hours-grid .grand-sum {
+  font-family: var(--font-mono); font-weight: 600; background: var(--surface-2);
+  padding: 8px 6px; min-width: 48px;
+}
+.hours-grid tfoot th, .hours-grid tfoot td { background: var(--surface-2); padding: 8px 6px; }
+.hours-grid .grand-sum { color: var(--accent); }
+
 @media (max-width: 900px) {
   .layout { flex-direction: column; }
   main { order: 1; width: 100%; padding: 14px 14px 90px; }

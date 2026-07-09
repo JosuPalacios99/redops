@@ -2,8 +2,11 @@
 const App = {
   state: {
     cursor: new Date(),        // mes visible
+    weekCursor: new Date(),    // semana visible en la vista de horas
     view: 'month',
     data: { audits: [], events: [], vacations: [], types: {}, teammates: {} },
+    timeData: null,            // rejilla de horas de la semana visible
+    extraRows: [],             // filas añadidas a mano en la rejilla (task keys)
     notes: [],
     todos: [],
     setupMode: false,
@@ -77,7 +80,8 @@ const App = {
 
   render() {
     const { cursor, data, view } = this.state;
-    this.$('month-label').textContent = I18N.monthLabel(cursor);
+    this.$('month-label').textContent =
+      view === 'hours' ? this.weekLabel() : I18N.monthLabel(cursor);
 
     const handlers = {
       onDayClick: (d) => this.openDayModal(d),
@@ -88,17 +92,368 @@ const App = {
 
     this.$('calendar-view').classList.toggle('hidden', view !== 'month');
     this.$('agenda-view').classList.toggle('hidden', view !== 'agenda');
+    this.$('hours-view').classList.toggle('hidden', view !== 'hours');
     this.$('view-month').classList.toggle('active', view === 'month');
     this.$('view-agenda').classList.toggle('active', view === 'agenda');
+    this.$('view-hours').classList.toggle('active', view === 'hours');
 
     if (view === 'month') {
       Cal.renderMonth(this.$('calendar-view'),
         cursor.getFullYear(), cursor.getMonth(), data, handlers);
-    } else {
+    } else if (view === 'agenda') {
       Cal.renderAgenda(this.$('agenda-view'), data, handlers);
+    } else {
+      this.renderHours();
     }
     this.renderSidebar();
     this.renderLegend();
+  },
+
+  // ------------------------------------------------------------ horas
+
+  weekLabel() {
+    const td = this.state.timeData;
+    if (!td) return '';
+    const loc = I18N.lang === 'es' ? 'es-ES' : 'en-GB';
+    const a = Cal.parse(td.days[0]).toLocaleDateString(loc, { day: 'numeric', month: 'short' });
+    const b = Cal.parse(td.days[6]).toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${a} – ${b}`;
+  },
+
+  fmtHours(h) {
+    return Number.isInteger(h) ? String(h) : String(Number(h.toFixed(2)));
+  },
+
+  navigate(dir) {
+    if (this.state.view === 'hours') {
+      this.state.weekCursor.setDate(this.state.weekCursor.getDate() + dir * 7);
+      this.loadHours();
+    } else {
+      this.state.cursor.setMonth(this.state.cursor.getMonth() + dir);
+      this.refresh();
+    }
+  },
+
+  async loadHours() {
+    const start = Cal.fmt(Cal.weekStart(this.state.weekCursor));
+    this.state.timeData = await API.get(`/api/time/week?start=${start}`);
+    this.state.view = 'hours';
+    this.render();
+  },
+
+  /* Filas visibles de la rejilla: categorías + auditorías que solapan la semana
+     o tienen horas imputadas + filas añadidas a mano. */
+  eventColor(kind) {
+    return kind === 'meeting' ? '#a78bfa' : '#e3b341';
+  },
+
+  eventRowName(ev) {
+    const time = ev.datetime.includes('T') ? ' ' + ev.datetime.slice(11, 16) : '';
+    return `${ev.kind === 'meeting' ? '👥' : '✔'} ${ev.title}${time}`;
+  },
+
+  hoursRows() {
+    const td = this.state.timeData;
+    const first = td.days[0], last = td.days[6];
+    const catById = {}, auditById = {}, eventById = {};
+    td.categories.forEach((c) => { catById[c.id] = c; });
+    td.audits.forEach((a) => { auditById[a.id] = a; });
+    (td.events || []).forEach((e) => { eventById[e.id] = e; });
+
+    const rows = [];
+    const seen = new Set();
+    const push = (key, name, color) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({ key, name, color });
+    };
+    const pushKey = (key) => {
+      const [kind, id] = key.split(':');
+      if (kind === 'audit' && auditById[id]) push(key, auditById[id].title, auditById[id].color);
+      else if (kind === 'cat' && catById[id]) push(key, catById[id].name, catById[id].color);
+      else if (kind === 'event' && eventById[id]) {
+        push(key, this.eventRowName(eventById[id]), this.eventColor(eventById[id].kind));
+      }
+    };
+
+    td.categories.forEach((c) => push(`cat:${c.id}`, c.name, c.color));
+    td.audits.forEach((a) => {
+      const exec = a.audit_start && a.audit_start <= last && a.audit_end >= first;
+      const rep = a.report_start && a.report_end &&
+        a.report_start <= last && a.report_end >= first;
+      if (exec || rep) push(`audit:${a.id}`, a.title, a.color);
+    });
+    // Reuniones y tareas que caen en la semana
+    (td.events || []).forEach((e) =>
+      push(`event:${e.id}`, this.eventRowName(e), this.eventColor(e.kind)));
+    // Filas con horas imputadas aunque la tarea no salga arriba
+    td.entries.forEach((e) => {
+      const key = e.audit_id ? `audit:${e.audit_id}`
+        : e.event_id ? `event:${e.event_id}` : `cat:${e.category_id}`;
+      pushKey(key);
+    });
+    // Filas añadidas a mano en la sesión
+    this.state.extraRows.forEach((key) => pushKey(key));
+    return { rows, catById, auditById, eventById };
+  },
+
+  entryCol(kind) {
+    return kind === 'audit' ? 'audit_id' : kind === 'event' ? 'event_id' : 'category_id';
+  },
+
+  cellValue(key, day) {
+    const [kind, id] = key.split(':');
+    const col = this.entryCol(kind);
+    const e = this.state.timeData.entries.find((x) =>
+      x.day === day && x[col] === Number(id));
+    return e || null;
+  },
+
+  setLocalEntry(key, day, hours, note) {
+    const [kind, id] = key.split(':');
+    const col = this.entryCol(kind);
+    const list = this.state.timeData.entries;
+    const idx = list.findIndex((x) => x.day === day && x[col] === Number(id));
+    if (hours > 0) {
+      const rec = { day, hours, note: note || null,
+        audit_id: null, category_id: null, event_id: null };
+      rec[col] = Number(id);
+      if (idx >= 0) list[idx] = rec; else list.push(rec);
+    } else if (idx >= 0) {
+      list.splice(idx, 1);
+    }
+  },
+
+  renderHours() {
+    const box = this.$('hours-view');
+    box.innerHTML = '';
+    const td = this.state.timeData;
+    if (!td) return;
+    const { rows, catById, auditById } = this.hoursRows();
+    const days = td.days;
+    const todayStr = Cal.fmt(new Date());
+
+    // Barra de herramientas
+    const toolbar = document.createElement('div');
+    toolbar.className = 'hours-toolbar';
+
+    const addSel = document.createElement('select');
+    addSel.className = 'hours-addrow';
+    addSel.innerHTML = `<option value="">${I18N.t('hours.add_row')}</option>`;
+    const shown = new Set(rows.map((r) => r.key));
+    td.audits.forEach((a) => {
+      if (!shown.has(`audit:${a.id}`)) {
+        const o = document.createElement('option');
+        o.value = `audit:${a.id}`;
+        o.textContent = a.title;
+        addSel.appendChild(o);
+      }
+    });
+    td.categories.forEach((c) => {
+      if (!shown.has(`cat:${c.id}`)) {
+        const o = document.createElement('option');
+        o.value = `cat:${c.id}`;
+        o.textContent = c.name;
+        addSel.appendChild(o);
+      }
+    });
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = I18N.t('hours.new_cat');
+    addSel.appendChild(newOpt);
+    addSel.addEventListener('change', async () => {
+      const v = addSel.value;
+      if (!v) return;
+      if (v === '__new__') {
+        const name = (prompt(I18N.t('hours.new_cat_prompt')) || '').trim();
+        addSel.value = '';
+        if (!name) return;
+        try {
+          await API.post('/api/time/categories', { name, color: '#8b949e' });
+          await this.loadHours();  // recarga: la categoría nueva sale como fila
+        } catch (err) {
+          this.toast(`${I18N.t('toast.error')}: ${err.message}`, true);
+        }
+        return;
+      }
+      this.state.extraRows.push(v);
+      this.renderHours();
+    });
+    toolbar.appendChild(addSel);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn';
+    copyBtn.textContent = I18N.t('hours.copy');
+    copyBtn.addEventListener('click', () => this.copyHoursSummary(rows));
+    toolbar.appendChild(copyBtn);
+
+    const total = document.createElement('span');
+    total.className = 'hours-weektotal';
+    total.id = 'hours-weektotal';
+    toolbar.appendChild(total);
+    box.appendChild(toolbar);
+
+    if (!rows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty-hint';
+      empty.textContent = I18N.t('hours.empty');
+      box.appendChild(empty);
+      return;
+    }
+
+    // Tabla
+    const wrap = document.createElement('div');
+    wrap.className = 'hours-wrap';
+    const table = document.createElement('table');
+    table.className = 'hours-grid';
+    const loc = I18N.lang === 'es' ? 'es-ES' : 'en-GB';
+
+    const thead = document.createElement('thead');
+    const htr = document.createElement('tr');
+    htr.innerHTML = `<th class="task-col">${I18N.t('hours.task')}</th>`;
+    days.forEach((ds) => {
+      const d = Cal.parse(ds);
+      const th = document.createElement('th');
+      th.className = 'day-col';
+      if (ds === todayStr) th.classList.add('today');
+      if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
+      th.innerHTML = `<span class="dow">${d.toLocaleDateString(loc, { weekday: 'short' })}</span>` +
+        `<span class="dnum">${d.getDate()}</span>`;
+      htr.appendChild(th);
+    });
+    const thTot = document.createElement('th');
+    thTot.className = 'sum-col';
+    thTot.textContent = 'Σ';
+    htr.appendChild(thTot);
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach((row) => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.className = 'task-col';
+      th.innerHTML = `<span class="row-swatch"></span><span class="row-name"></span>`;
+      th.querySelector('.row-swatch').style.background = row.color || '#8b949e';
+      th.querySelector('.row-name').textContent = row.name;
+      tr.appendChild(th);
+
+      days.forEach((ds) => {
+        const td2 = document.createElement('td');
+        td2.className = 'cell';
+        if (ds === todayStr) td2.classList.add('today');
+        const cur = this.cellValue(row.key, ds);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'decimal';
+        input.className = 'cell-input';
+        input.dataset.key = row.key;
+        input.dataset.day = ds;
+        input.value = cur ? this.fmtHours(cur.hours) : '';
+        if (cur && cur.note) { input.title = cur.note; td2.classList.add('has-note'); }
+        input.addEventListener('change', () => this.saveCell(input));
+        input.addEventListener('focus', () => input.select());
+        td2.appendChild(input);
+        tr.appendChild(td2);
+      });
+
+      const tot = document.createElement('td');
+      tot.className = 'row-sum';
+      tot.dataset.key = row.key;
+      tr.appendChild(tot);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    const tfoot = document.createElement('tfoot');
+    const ftr = document.createElement('tr');
+    ftr.innerHTML = `<th class="task-col">${I18N.t('hours.day_total')}</th>`;
+    days.forEach((ds) => {
+      const td3 = document.createElement('td');
+      td3.className = 'day-sum';
+      td3.dataset.day = ds;
+      if (ds === todayStr) td3.classList.add('today');
+      ftr.appendChild(td3);
+    });
+    const grand = document.createElement('td');
+    grand.className = 'grand-sum';
+    ftr.appendChild(grand);
+    tfoot.appendChild(ftr);
+    table.appendChild(tfoot);
+
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    this.updateHoursTotals();
+  },
+
+  parseCell(str) {
+    const raw = (str || '').trim().replace(',', '.');
+    if (raw === '') return 0;
+    const n = parseFloat(raw);
+    return isNaN(n) || n < 0 ? 0 : n;
+  },
+
+  async saveCell(input) {
+    const key = input.dataset.key;
+    const day = input.dataset.day;
+    const hours = this.parseCell(input.value);
+    const [kind, id] = key.split(':');
+    const prev = this.cellValue(key, day);
+    const body = { day, hours, note: prev ? prev.note : null };
+    body[this.entryCol(kind)] = Number(id);
+    try {
+      await API.put('/api/time/entry', body);
+      this.setLocalEntry(key, day, hours, prev ? prev.note : null);
+      input.value = hours > 0 ? this.fmtHours(hours) : '';
+      this.updateHoursTotals();
+    } catch (err) {
+      this.toast(`${I18N.t('toast.error')}: ${err.message}`, true);
+    }
+  },
+
+  updateHoursTotals() {
+    const box = this.$('hours-view');
+    const days = this.state.timeData.days;
+    const dayTotals = {};
+    days.forEach((d) => { dayTotals[d] = 0; });
+    let grand = 0;
+
+    box.querySelectorAll('tbody tr').forEach((tr) => {
+      let rowSum = 0;
+      tr.querySelectorAll('.cell-input').forEach((inp) => {
+        const v = this.parseCell(inp.value);
+        rowSum += v;
+        dayTotals[inp.dataset.day] += v;
+      });
+      grand += rowSum;
+      const cell = tr.querySelector('.row-sum');
+      cell.textContent = rowSum ? this.fmtHours(rowSum) : '';
+    });
+    box.querySelectorAll('.day-sum').forEach((td) => {
+      const v = dayTotals[td.dataset.day] || 0;
+      td.textContent = v ? this.fmtHours(v) : '';
+    });
+    const grandCell = box.querySelector('.grand-sum');
+    if (grandCell) grandCell.textContent = grand ? this.fmtHours(grand) : '';
+    const wt = this.$('hours-weektotal');
+    if (wt) wt.textContent = `${I18N.t('hours.week_total')}: ${this.fmtHours(grand)} ${I18N.t('unit.hours')}`;
+  },
+
+  copyHoursSummary(rows) {
+    const lines = [];
+    let grand = 0;
+    const box = this.$('hours-view');
+    rows.forEach((row, i) => {
+      const tr = box.querySelectorAll('tbody tr')[i];
+      let sum = 0;
+      tr.querySelectorAll('.cell-input').forEach((inp) => { sum += this.parseCell(inp.value); });
+      if (sum > 0) { lines.push(`${row.name}: ${this.fmtHours(sum)} ${I18N.t('unit.hours')}`); grand += sum; }
+    });
+    lines.push(`${I18N.t('hours.week_total')}: ${this.fmtHours(grand)} ${I18N.t('unit.hours')}`);
+    const text = `${this.weekLabel()}\n${lines.join('\n')}`;
+    navigator.clipboard.writeText(text)
+      .then(() => this.toast(I18N.t('hours.copied')))
+      .catch(() => this.toast(I18N.t('toast.error'), true));
   },
 
   // ------------------------------------------------------------ sidebar
@@ -702,7 +1057,31 @@ const App = {
     this.renderOffsetChips('set-reminder-chips', this.state.settingsOffsets);
     await this.renderTeammatesPane();
     await this.renderTypesPane();
+    await this.renderCategoriesPane();
     this.openModal('modal-settings');
+  },
+
+  async renderCategoriesPane() {
+    const cats = await API.get('/api/time/categories');
+    const list = this.$('time-cats-list');
+    list.innerHTML = '';
+    if (!cats.length) {
+      list.innerHTML = `<p class="empty-hint">${I18N.t('todos.empty')}</p>`;
+    }
+    cats.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'manage-row';
+      row.innerHTML = `<span class="swatch"></span><span></span>
+        <button class="del"><svg class="icon"><use href="#i-trash"/></svg></button>`;
+      row.querySelector('.swatch').style.background = c.color;
+      row.querySelector('span:nth-child(2)').textContent = c.name;
+      row.querySelector('.del').addEventListener('click', async () => {
+        if (!confirm(I18N.t('settings.cat_delete_confirm'))) return;
+        await API.del(`/api/time/categories/${c.id}`);
+        await this.renderCategoriesPane();
+      });
+      list.appendChild(row);
+    });
   },
 
   async renderTeammatesPane() {
@@ -788,17 +1167,13 @@ const App = {
     });
 
     // Navegación
-    this.$('nav-prev').addEventListener('click', () => {
-      this.state.cursor.setMonth(this.state.cursor.getMonth() - 1);
-      this.refresh();
-    });
-    this.$('nav-next').addEventListener('click', () => {
-      this.state.cursor.setMonth(this.state.cursor.getMonth() + 1);
-      this.refresh();
-    });
+    this.$('nav-prev').addEventListener('click', () => this.navigate(-1));
+    this.$('nav-next').addEventListener('click', () => this.navigate(1));
     this.$('nav-today').addEventListener('click', () => {
       this.state.cursor = new Date();
-      this.refresh();
+      this.state.weekCursor = new Date();
+      if (this.state.view === 'hours') this.loadHours();
+      else this.refresh();
     });
     this.$('view-month').addEventListener('click', () => {
       this.state.view = 'month';
@@ -808,6 +1183,7 @@ const App = {
       this.state.view = 'agenda';
       this.render();
     });
+    this.$('view-hours').addEventListener('click', () => this.loadHours());
     this.$('btn-logout').addEventListener('click', async () => {
       await API.post('/api/auth/logout', {});
       this.showAuth(false);
@@ -945,6 +1321,16 @@ const App = {
       this.$('type-name-en').value = '';
       await this.renderTypesPane();
       await this.refresh();
+    });
+
+    this.$('time-cat-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await API.post('/api/time/categories', {
+        name: this.$('time-cat-name').value,
+        color: this.$('time-cat-color').value,
+      });
+      this.$('time-cat-name').value = '';
+      await this.renderCategoriesPane();
     });
 
     this.$('password-form').addEventListener('submit', async (e) => {

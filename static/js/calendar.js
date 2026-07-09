@@ -9,6 +9,14 @@ const Cal = {
     return new Date(y, m - 1, d);
   },
 
+  /* Lunes de la semana que contiene `d`. */
+  weekStart(d) {
+    const s = new Date(d);
+    s.setHours(0, 0, 0, 0);
+    s.setDate(s.getDate() - ((s.getDay() + 6) % 7));
+    return s;
+  },
+
   /* Rango visible de un mes (lunes a domingo, 6 semanas). */
   monthRange(year, month) {
     const first = new Date(year, month, 1);
